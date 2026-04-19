@@ -19,7 +19,9 @@ include_directories(include)
 ament_auto_add_executable(gz2ros src/gz2ros.cpp)
 target_link_libraries(gz2ros ${GeographicLib_LIBRARIES})
 
+
 install(DIRECTORY params DESTINATION share/${PROJECT_NAME})
 
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

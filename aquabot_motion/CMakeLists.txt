@@ -7,6 +7,7 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
 src/cmd.py
 src/planner.py
+src/follower.py
 src/astar.py
 src/bitangents.py
 DESTINATION lib/${PROJECT_NAME})
