@@ -12,7 +12,7 @@ class PathFollower(Node):
         # Name this node 'path_follower'
         super().__init__('path_follower')
         
-        self.get_logger().info("Path Follower Node Started!")
+        self.get_logger().info("Path Follower Node Started")
 
         # store the path from the planner here once we receive it
         self.current_path = [] 
