@@ -63,8 +63,8 @@ class MissionControl(Node):
         if len(response.plan.poses) > 0:
             self.get_logger().info("Path received! Sending to follower...")
             
-            # We need a publisher to send this path to the follower node
-            # (We will create this publisher in the __init__ next)
+            # we need a publisher to send this path to the follower node
+            # create this publisher in the __init__ next
             self.path_pub.publish(response.plan)
             
             # Shift into driving mode!
@@ -72,7 +72,7 @@ class MissionControl(Node):
         else:
             self.get_logger().error("Planner failed to find a path!")
             self.state = MissionState.PLANNING_PATH # Try again
-    # --- The Brain ---
+
     def state_machine_loop(self):
         """ This function runs 10 times a second and controls the mission flow """
         

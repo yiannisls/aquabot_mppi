@@ -132,7 +132,7 @@ private:
 
   }
   // TODO() Implement the cost_function
-  
+
   void cost_function(){
 
   }
