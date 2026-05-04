@@ -60,7 +60,7 @@ private:
     double tau_Y = (F_L * std::sin(alpha_L)) + (F_R * std::sin(alpha_R));
     double tau_N = L_/(2*(F_R * std::cos(alpha_L)) - (F_L * std::cos(alpha_R)) - W_*((F_L * std::sin(alpha_L)) + (F_R * std::sin(alpha_R))));// ... your turn using L_ and W_ ...
 
-    // calculate local acelerations.
+    // calculate local acelerations
     // M*v_dot + D*v = tau)
     // Therefor, v_dot = M^-1(tau-D(v)). since M diagonal, we can divide by M.
     double u_dot = (tau_X - d_u_ * u) / m_u_;
