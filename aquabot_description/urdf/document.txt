@@ -1,0 +1,35 @@
+=========================================================
+AQUABOT PHYSICAL PARAMETERS (Extracted from URDF)
+=========================================================
+
+1. THRUSTER POSITIONS (LEVER ARMS)
+---------------------------------------------------------
+- L (Distance from CG to thrusters along X-axis) : 3.0 meters
+- W (Distance from centerline to thrusters along Y) : 0.6 meters
+  * Left Thruster Position  : (x = -3.0, y =  0.6)
+  * Right Thruster Position : (x = -3.0, y = -0.6)
+
+2. ACTUATOR LIMITS
+---------------------------------------------------------
+- Max Thrust (T_L, T_R)     : +/- 5000.0 Newtons
+- Max Angle (alpha_L, alpha_R): +/- 0.78539816339 radians (+/- 45 degrees)
+
+3. MASS PARAMETERS (Diagonal Mass Matrix M)
+---------------------------------------------------------
+- Mass in Surge (m_u)       : 1000.0 kg  (Base link mass)
+- Mass in Sway (m_v)        : 1000.0 kg  (Base link mass)
+- Yaw Inertia (m_r or I_z)  : 446.0  kg*m^2 (Base link izz)
+  * Note: Added mass (xDotU, yDotV, nDotR) is 0.0 in the simple plugin.
+
+4. HYDRODYNAMIC DAMPING (Linear Drag Matrix D)
+---------------------------------------------------------
+- Surge Linear Drag (d_u)   : 182.0 kg/s    (xU parameter)
+- Sway Linear Drag (d_v)    : 183.0 kg/s    (yV parameter)
+- Yaw Linear Drag (d_r)     : 1199.0 kg*m^2/s (nR parameter)
+
+---------------------------------------------------------
+Tougher Model (Quadratic Drag) - Save for later:
+- Surge Quadratic (xUU)     : 224.0
+- Sway Quadratic (yVV)      : 149.0
+- Yaw Quadratic (nRR)       : 979.0
+=========================================================

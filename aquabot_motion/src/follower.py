@@ -14,49 +14,47 @@ class PathFollower(Node):
         
         self.get_logger().info("Path Follower Node Started!")
 
-        # We will store the path from the planner here once we receive it
+        # store the path from the planner here once we receive it
         self.current_path = [] 
-
-
+        # publisher, where 10 = queue size (holds up to 10 messages in line)
         self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         
-
+        # sub to plan
         self.plan_sub = self.create_subscription(Path, '/aquabot/plan', self.plan_callback, 10)
-        
+        #sub to odomtery
         self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         
     def plan_callback(self, msg):
-            """ This function runs every time a new path is published """
+            """save pose from rviz"""
             self.current_path = msg.poses
             self.get_logger().info(f"Received a new path with {len(self.current_path)} waypoints!")
             
     def get_yaw_from_quaternion(self, q):
-        """ Helper function to convert quaternion to a 2D yaw angle (in radians) """
+        """ quaternions to a 2D yaw angle (in radians) """
         t3 = +2.0 * (q.w * q.z + q.x * q.y)
         t4 = +1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         return math.atan2(t3, t4)
 
     def odom_callback(self, msg):
-        """ This runs continuously as the boat reports its position """
         
-        # 1. If we don't have a path yet, just sit still
+        # if we don't have a path yet, just sit still
         if not self.current_path:
             return
 
-        # 2. Find out where the boat is right now
+        # find out where the boat is right now
         boat_x = msg.pose.pose.position.x
         boat_y = msg.pose.pose.position.y
         
-        # Get the boat's heading (yaw)
+        # get the boat's heading (yaw)
         q = msg.pose.pose.orientation
         boat_yaw = self.get_yaw_from_quaternion(q)
 
-        # 3. Find the Look-Ahead Point
-        look_ahead_distance = 3.0  # Meters ahead we want to target
+        # find the Look-Ahead Point
+        look_ahead_distance = 3.0  # meters ahead we want to target
         target_x = None
         target_y = None
 
-        # Loop through the path to find the first point that is far enough away
+        # loop through the path to find the first point that is far enough away
         for pose_stamped in self.current_path:
             px = pose_stamped.pose.position.x
             py = pose_stamped.pose.position.y
@@ -67,7 +65,7 @@ class PathFollower(Node):
                 target_y = py
                 break
         
-        # If no point is far enough, target the very last point in the path
+        # if no point is far enough, target the very last point in the path
         if target_x is None:
             last_pose = self.current_path[-1].pose.position
             target_x = last_pose.x
@@ -83,8 +81,8 @@ class PathFollower(Node):
                 self.cmd_pub.publish(stop_cmd)
                 return
 
-        # 4. Calculate the steering commands
-        # Find the angle from the boat directly to the target point
+        # calculate the steering commands
+        # find the angle from the boat directly to the target point
         angle_to_target = math.atan2(target_y - boat_y, target_x - boat_x)
         
         # Find the difference between where we are looking and where we want to look
@@ -95,12 +93,11 @@ class PathFollower(Node):
 
         # 5. Send the commands to cmd_vel
         cmd = Twist()
-        cmd.linear.x = 2.0  # Constant forward speed of 2 m/s
         
-        # Proportional controller for steering (multiply error by a gain)
+        # Proportional controller for steering
         kp_steering = 1.5 
         cmd.angular.z = kp_steering * heading_error 
-        
+            
         self.cmd_pub.publish(cmd)
         
         
