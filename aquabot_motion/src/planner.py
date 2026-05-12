@@ -45,6 +45,7 @@ class Planner(Node):
         for x,y,rad in obstacles:
             self.planner.add_obstacle(x,y,rad)
         self.N = len(self.planner.no_go_zones)
+        self.planner.init_graph()
 
         self.sub = self.create_subscription(PoseArray, 'turbines', self.add_turbines, 10)
         self.turbines = []

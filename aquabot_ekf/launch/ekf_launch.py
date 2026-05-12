@@ -16,8 +16,8 @@ def generate_launch_description():
                 remappings = {'gps_fix': 'sensors/gps/gps/fix',
                               'imu_raw': 'sensors/imu/imu/data'})
                 
-        # simple launch python is used to do exactly that
-        sl.node('aquabot_motion', 'cmd.py')
+        # Commented out cmd.py because motion_node now computes and controls thrusters directly!
+        # sl.node('aquabot_motion', 'cmd.py')
         
         sl.node('aquabot_motion', 'planner.py')
 
@@ -25,7 +25,7 @@ def generate_launch_description():
                 parameters = [sl.find('aquabot_ekf', 'ekf.yaml')],
                 remappings = {'odometry/filtered': 'odom'})
         
-        sl.node('aquabot_motion', 'follower.py')
+        sl.node('aquabot_motion', 'motion_node')
         
         
 
