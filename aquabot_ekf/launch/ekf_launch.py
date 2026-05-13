@@ -26,7 +26,9 @@ def generate_launch_description():
                 remappings = {'odometry/filtered': 'odom'})
         
         sl.node('aquabot_motion', 'motion_node')
-        
+
+        # mission node
+        # sl.node('aquabot_motion', 'mission_turbines.py')
         
 
     with sl.group(if_arg='manual'):
