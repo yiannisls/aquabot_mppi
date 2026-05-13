@@ -34,6 +34,7 @@ src/planner.py
 src/follower.py
 src/astar.py
 src/bitangents.py
+src/mission_turbines.py
 DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS

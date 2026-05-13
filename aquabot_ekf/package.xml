@@ -14,7 +14,7 @@
   <depend>rclcpp</depend>
   <depend>robot_localization</depend>
   <depend>sensor_msgs</depend>
-  <depend>nav_msgs</depend>>
+  <depend>nav_msgs</depend>
   <depend>tf2_ros</depend>
 
   <exec_depend>simple_launch</exec_depend>
