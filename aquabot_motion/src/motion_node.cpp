@@ -12,6 +12,9 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2_ros/transform_broadcaster.h"
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <geometry_msgs/msg/point.hpp>
 
 
 
@@ -28,12 +31,17 @@ public:
     // plan_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
     //   "/aquabot/plan", 10, std::bind(&AquabotController::plan_callback, this, std::placeholders::_1));
     goal_subscription_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/goal_pose", 10, std::bind(&AquabotController::goal_callback, this, std::placeholders::_1));
+      "/aquabot/goal_pose", 10, std::bind(&AquabotController::goal_callback, this, std::placeholders::_1));
 
     pub_fl_ = this->create_publisher<std_msgs::msg::Float64>("/aquabot/thrusters/left/thrust", 10);
     pub_fr_ = this->create_publisher<std_msgs::msg::Float64>("/aquabot/thrusters/right/thrust", 10);
     pub_al_ = this->create_publisher<std_msgs::msg::Float64>("/aquabot/thrusters/left/cmd_pos", 10);
     pub_ar_ = this->create_publisher<std_msgs::msg::Float64>("/aquabot/thrusters/right/cmd_pos", 10);
+
+
+    // Publishers for visualisation
+    pub_optimal_path_ = this->create_publisher<nav_msgs::msg::Path>("/aquabot/mppi/optimal_path", 10);
+    pub_current_state_rollouts_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/aquabot/mppi/rollouts", 10);
 
     //10 Hz timer
     timer_ = this->create_wall_timer(100ms, std::bind(&AquabotController::control_loop, this));
@@ -47,6 +55,33 @@ public:
   }
 
 private:
+// void plan_callback(const nav_msgs::msg::Path::SharedPtr msg) {
+  //   if (msg->poses.empty()) {
+  //     RCLCPP_WARN(this->get_logger(), "Received an empty plan!");
+  //     return;
+  //   }
+  //   current_plan_ = *msg;
+  //   goal_received_ = true;
+
+  //   auto end_pose = current_plan_.poses.back().pose;
+  //   RCLCPP_INFO(this->get_logger(), "New Plan Received! End Goal: X: %.2f, Y: %.2f", 
+  //               end_pose.position.x, end_pose.position.y);
+  // }
+  void goal_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    goal_pose_(0) = msg->pose.position.x;
+    goal_pose_(1) = msg->pose.position.y;
+    
+    tf2::Quaternion q(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w);
+    tf2::Matrix3x3 m(q);
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+    goal_pose_(2) = yaw;
+    
+    goal_received_ = true;
+    // print on terminal the pose
+    RCLCPP_INFO(this->get_logger(), "New Goal Received: X: %.2f, Y: %.2f, Yaw: %.2f", goal_pose_(0), goal_pose_(1), goal_pose_(2));
+  }
+
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   
   has_odom_ = true;
@@ -127,32 +162,7 @@ private:
     return next_state;
   }
 
-  // void plan_callback(const nav_msgs::msg::Path::SharedPtr msg) {
-  //   if (msg->poses.empty()) {
-  //     RCLCPP_WARN(this->get_logger(), "Received an empty plan!");
-  //     return;
-  //   }
-  //   current_plan_ = *msg;
-  //   goal_received_ = true;
-
-  //   auto end_pose = current_plan_.poses.back().pose;
-  //   RCLCPP_INFO(this->get_logger(), "New Plan Received! End Goal: X: %.2f, Y: %.2f", 
-  //               end_pose.position.x, end_pose.position.y);
-  // }
-  void goal_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    goal_pose_(0) = msg->pose.position.x;
-    goal_pose_(1) = msg->pose.position.y;
-    
-    tf2::Quaternion q(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w);
-    tf2::Matrix3x3 m(q);
-    double roll, pitch, yaw;
-    m.getRPY(roll, pitch, yaw);
-    goal_pose_(2) = yaw;
-    
-    goal_received_ = true;
-    // print on terminal the pose
-    RCLCPP_INFO(this->get_logger(), "New Goal Received: X: %.2f, Y: %.2f, Yaw: %.2f", goal_pose_(0), goal_pose_(1), goal_pose_(2));
-  }
+  
 
 
 
@@ -246,6 +256,8 @@ private:
     // double final_x = current_plan_.poses.back().pose.position.x;
     // double final_y = current_plan_.poses.back().pose.position.y;
     // double dist_to_end = std::hypot(final_x - boat_x, final_y - boat_y);
+
+
     double dist_to_end = std::hypot(goal_pose_(0) - boat_x, goal_pose_(1) - boat_y);
     if (dist_to_end < 2.0) {
       RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Goal Reached! Stopping.");
@@ -262,21 +274,40 @@ private:
       return;
     }
 
-
+    
     std::vector<double> rollout_costs(K_, 0.0);
     std::vector<Eigen::MatrixXd> rollout_noises(K_, Eigen::MatrixXd::Zero(4, horizon_));
+
+    std::vector<visualization_msgs::msg::Marker> temp_markers;
+    std::vector<double> temp_costs;
 
     for(int k=0; k<K_; k++){
       Eigen::VectorXd current_predicted_state_ = current_state_;
       double total_cost_ = 0.0;
+      
+      // Create a marker for this specific rollout
+      visualization_msgs::msg::Marker rollout_marker;
+      bool visualize_this_rollout = (k % 10 == 0); // only visualizing 1 out of 10 rollouts
+
+      if (visualize_this_rollout) {
+        rollout_marker.header.frame_id = "world"; // global frame odom
+        rollout_marker.header.stamp = this->now();
+        rollout_marker.ns = "mppi_rollouts";
+        rollout_marker.id = k;
+        rollout_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+        rollout_marker.action = visualization_msgs::msg::Marker::ADD;
+        rollout_marker.scale.x = 0.02; // Thin lines
+      }
+      
+
       for(int h=0; h<horizon_; h++){
-        // CURR NOMINAL
-        auto u_nominal = U_.col(h);
+        
+        auto u_nominal = U_.col(h); // current nominal u
         
         //ADD NOISE
         Eigen::VectorXd noise = Eigen::VectorXd::Random(4); // values between -1.0 and 1.0
-        noise(0) *= 0.8; // thrust noise variance
-        noise(1) *= 0.8;
+        noise(0) *= 0.5; // thrust noise variance
+        noise(1) *= 0.5;
         noise(2) *= 0.2; // angle noise variance
         noise(3) *= 0.2;
 
@@ -293,19 +324,61 @@ private:
         // but clamped to 1.0 therefore noise will be 0.2)
         rollout_noises[k].col(h) = noisy_control - u_nominal;
 
-        // PREDICT
+        // PREDICT it
         current_predicted_state_ = predict_state(current_predicted_state_, noisy_control);
 
-        // COST IT
+        // COST it
         total_cost_ += cost_function(current_predicted_state_, goal_pose_);
+        
+        // STORE points for visualization
+        if (visualize_this_rollout) {
+            geometry_msgs::msg::Point p;
+            p.x = current_predicted_state_(0);
+            p.y = current_predicted_state_(1);
+            p.z = 0.0;
+            rollout_marker.points.push_back(p);
+        }
+      }
+
+      // Save the marker and its specific cost for the color pass
+      if (visualize_this_rollout) {
+          temp_markers.push_back(rollout_marker);
+          temp_costs.push_back(total_cost_);
       }
       rollout_costs[k] = total_cost_;
     }
+    // --- COLOR CODING PASS ---
+    // First, find the bounds of our costs to create the gradient
+    double min_cost_ = *std::min_element(rollout_costs.begin(), rollout_costs.end());
+    double max_cost_ = *std::max_element(rollout_costs.begin(), rollout_costs.end());
+    double cost_range = std::max(max_cost_ - min_cost_, 1e-6); // Prevent divide by zero
 
+    visualization_msgs::msg::MarkerArray rollout_markers;
+
+    for (size_t i = 0; i < temp_markers.size(); ++i) {
+        // Normalize the cost between 0.0 (Best) and 1.0 (Worst)
+        double normalized_cost = (temp_costs[i] - min_cost_) / cost_range;
+        normalized_cost = std::clamp(normalized_cost, 0.0, 1.0);
+
+        // Color Math: Green to Red
+        // As normalized_cost gets higher (worse), Red goes up and Green goes down.
+        temp_markers[i].color.r = normalized_cost; 
+        temp_markers[i].color.g = 1.0 - normalized_cost; 
+        temp_markers[i].color.b = 0.0;
+        
+        // Keep the alpha low so the overlapping green lines glow brightly
+        temp_markers[i].color.a = 0.15; 
+
+        rollout_markers.markers.push_back(temp_markers[i]);
+    }
+
+    pub_current_state_rollouts_->publish(rollout_markers);
+    // -------------------------
+
+    
     // SOFTMAX WEIGHTING to find the best path
 
-    // First, find the lowest cost to keep the exponential math stable
-    double min_cost_ = *std::min_element(rollout_costs.begin(), rollout_costs.end());
+
     
     double sum_weights_ = 0.0;
     std::vector<double> weights_(K_, 0.0);
@@ -368,6 +441,9 @@ private:
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_fr_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_al_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_ar_;
+
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_optimal_path_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_current_state_rollouts_;
 
   rclcpp::TimerBase::SharedPtr timer_;
   bool has_odom_;
