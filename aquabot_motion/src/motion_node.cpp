@@ -15,7 +15,7 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <geometry_msgs/msg/point.hpp>
-
+#include <random>
 
 
 using std::placeholders::_1;
@@ -24,6 +24,15 @@ using namespace std::chrono_literals;
 class AquabotController : public rclcpp::Node {
 public:
   AquabotController() : Node("aquabot_controller") {
+
+    // Declare and retrieve parameters (with default fallbacks)
+    this->declare_parameter("dt", 0.1);
+    this->declare_parameter("horizon", 60);
+    this->declare_parameter("lambda", 50.0);
+
+    dt_ = this->get_parameter("dt").as_double();
+    horizon_ = this->get_parameter("horizon").as_int();
+    lambda_ = this->get_parameter("lambda").as_double();
 
     odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/aquabot/odom", 10, std::bind(&AquabotController::odom_callback, this, std::placeholders::_1));
@@ -43,8 +52,8 @@ public:
     pub_optimal_path_ = this->create_publisher<nav_msgs::msg::Path>("/aquabot/mppi/optimal_path", 10);
     pub_current_state_rollouts_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/aquabot/mppi/rollouts", 10);
 
-    //10 Hz timer
-    timer_ = this->create_wall_timer(100ms, std::bind(&AquabotController::control_loop, this));
+    // Timer dynamically set from dt parameter
+    timer_ = this->create_wall_timer(std::chrono::milliseconds(static_cast<int>(dt_ * 1000.0)), std::bind(&AquabotController::control_loop, this));
     
     // flags to not start computing
     has_odom_ = false;
@@ -112,59 +121,68 @@ private:
 
   }
 
-  Eigen::VectorXd predict_state(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
-    double x = state(0);
-    double y = state(1);
+  Eigen::VectorXd calculate_dynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
     double yaw = state(2);
     double u = state(3);
     double v = state(4);
     double r = state(5);
 
-    
-    // Convert normalized thrust [-1.0, 1.0] to Newtons (5000N max thrust from URDF)
-    // Otherwise 1 Newton won't move a 1000kg boat!
+    // Convert normalized thrust [-1.0, 1.0] to Newtons
     double F_L = control(0) * 5000.0;
     double F_R = control(1) * 5000.0;
     double alpha_L = control(2);
     double alpha_R = control(3);
 
-    // tau = [X, Y, N]^T
-
+    // Calculate forces and moments (tau)
     double tau_X = (F_L * std::cos(alpha_L)) + (F_R * std::cos(alpha_R));
     double tau_Y = (F_L * std::sin(alpha_L)) + (F_R * std::sin(alpha_R));
-    double tau_N = (L_ / 2.0) * ((F_R * std::cos(alpha_R)) - (F_L * std::cos(alpha_L))) - (W_ / 2.0) * ((F_L * std::sin(alpha_L)) + (F_R * std::sin(alpha_R)));
+    double tau_N = (L_ / 2.0) * ((F_R * std::cos(alpha_R)) - (F_L * std::cos(alpha_L))) 
+                 - (W_ / 2.0) * ((F_L * std::sin(alpha_L)) + (F_R * std::sin(alpha_R)));
 
-    // calculate local acelerations
-    // M*v_dot + D*v = tau)
-    // Therefor, v_dot = M^-1(tau-D(v)). since M diagonal, we can divide by M.
-    double u_dot = (tau_X - d_u_ * u) / m_u_;
-    double v_dot = (tau_Y - d_v_ * v) / m_v_;
-    double r_dot = (tau_N - d_r_ * r) / m_r_;
+    // Calculate total drag forces (Linear + Quadratic)
+    double drag_u = (d_u_ * u) + (d_u_quad_ * u * std::abs(u));
+    double drag_v = (d_v_ * v) + (d_v_quad_ * v * std::abs(v));
+    double drag_r = (d_r_ * r) + (d_r_quad_ * r * std::abs(r));
 
-    // global velocities. explained by proff Kermorgrant
+    // Calculate local accelerations
+    double u_dot = (tau_X - drag_u) / m_u_;
+    double v_dot = (tau_Y - drag_v) / m_v_;
+    double r_dot = (tau_N - drag_r) / m_r_;
+
+    // Calculate global velocities
     double x_dot = (u * std::cos(yaw)) - (v * std::sin(yaw));
     double y_dot = (u * std::sin(yaw)) + (v * std::cos(yaw));
     double yaw_dot = r;
 
-    // Euler Integration
-    Eigen::VectorXd next_state(6);
-    next_state(0) = x + (x_dot * dt_);
-    next_state(1) = y + (y_dot * dt_);
-    next_state(2) = yaw + (yaw_dot * dt_);
-    next_state(3) = u + (u_dot * dt_);
-    next_state(4) = v + (v_dot * dt_);
-    next_state(5) = r + (r_dot * dt_);
+    // Pack the derivatives into a vector and return
+    Eigen::VectorXd state_dot(6);
+    state_dot << x_dot, y_dot, yaw_dot, u_dot, v_dot, r_dot;
+    return state_dot;
+  }
+  
 
-    // normalize the new yaw angle to stay between -PI and PI
-    // This is what the professor said to stay betwen the pi's
+Eigen::VectorXd predict_state(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    
+    // RK4 Integration Steps
+    Eigen::VectorXd k1 = calculate_dynamics(state, control);
+    Eigen::VectorXd k2 = calculate_dynamics(state + (0.5 * dt_ * k1), control);
+    Eigen::VectorXd k3 = calculate_dynamics(state + (0.5 * dt_ * k2), control);
+    Eigen::VectorXd k4 = calculate_dynamics(state + (dt_ * k3), control);
+
+    // Calculate the next state using the RK4 weighted average
+    Eigen::VectorXd next_state = state + (dt_ / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+
+    // Normalize the new yaw angle to stay between -PI and PI
     next_state(2) = std::atan2(std::sin(next_state(2)), std::cos(next_state(2)));
+
+    // Safety Clamps (RK4 is much more stable, but it's still good practice
+    // to prevent the optimizer from exploring mathematically impossible speeds)
+    next_state(3) = std::clamp(next_state(3), -10.0, 10.0); // Max surge
+    next_state(4) = std::clamp(next_state(4), -4.0, 4.0);   // Max sway
+    next_state(5) = std::clamp(next_state(5), -2.0, 2.0);   // Max yaw rate
 
     return next_state;
   }
-
-  
-
-
 
   double cost_function(const Eigen::VectorXd& state, const Eigen::VectorXd& goal) {
     
@@ -296,7 +314,8 @@ private:
         rollout_marker.id = k;
         rollout_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         rollout_marker.action = visualization_msgs::msg::Marker::ADD;
-        rollout_marker.scale.x = 0.02; // Thin lines
+        rollout_marker.scale.x = 0.20; // lines
+  
       }
       
 
@@ -304,12 +323,12 @@ private:
         
         auto u_nominal = U_.col(h); // current nominal u
         
-        //ADD NOISE
-        Eigen::VectorXd noise = Eigen::VectorXd::Random(4); // values between -1.0 and 1.0
-        noise(0) *= 0.5; // thrust noise variance
-        noise(1) *= 0.5;
-        noise(2) *= 0.2; // angle noise variance
-        noise(3) *= 0.2;
+        //ADD NOISE (Gaussian)
+        Eigen::VectorXd noise(4);
+        noise(0) = noise_thrust_(gen_); // thrust noise (stddev 0.4)
+        noise(1) = noise_thrust_(gen_);
+        noise(2) = noise_angle_(gen_);  // angle noise (stddev 0.1)
+        noise(3) = noise_angle_(gen_);
 
         Eigen::VectorXd noisy_control = u_nominal + noise;
 
@@ -328,7 +347,21 @@ private:
         current_predicted_state_ = predict_state(current_predicted_state_, noisy_control);
 
         // COST it
-        total_cost_ += cost_function(current_predicted_state_, goal_pose_);
+        // total_cost_ += cost_function(current_predicted_state_, goal_pose_);
+        // ADD PENALTY R MATRIX
+        
+        // state Cost
+        double state_cost = cost_function(current_predicted_state_, goal_pose_);
+
+        // Information-Theoretic Control Penalty
+        double control_penalty = 0.0;
+        control_penalty += (u_nominal(0) * rollout_noises[k](0, h)) / var_thrust_;
+        control_penalty += (u_nominal(1) * rollout_noises[k](1, h)) / var_thrust_;
+        control_penalty += (u_nominal(2) * rollout_noises[k](2, h)) / var_angle_;
+        control_penalty += (u_nominal(3) * rollout_noises[k](3, h)) / var_angle_;
+
+        // Total Accumulated Cost
+        total_cost_ += state_cost + (lambda_ * control_penalty);
         
         // STORE points for visualization
         if (visualize_this_rollout) {
@@ -366,8 +399,8 @@ private:
         temp_markers[i].color.g = 1.0 - normalized_cost; 
         temp_markers[i].color.b = 0.0;
         
-        // Keep the alpha low so the overlapping green lines glow brightly
-        temp_markers[i].color.a = 0.15; 
+        //  alpha for the overlapping green lines 
+        temp_markers[i].color.a = 0.5; 
 
         rollout_markers.markers.push_back(temp_markers[i]);
     }
@@ -453,15 +486,15 @@ private:
   // nav_msgs::msg::Path current_plan_;
 
   // MPPI parameters
-  double dt_ = 0.1; // 10 Hz
-  int horizon_ = 60; // Increased to 6 seconds of foresight to stop overshoot!
-  int K_ = 500; //rollouts
+  double dt_;
+  int horizon_;
+  int K_ = 1000; //rollouts
 
   // 4 rows (controls), horizon_ columns (future steps)
   Eigen::MatrixXd U_;
 
   // Temperature for softmax weighting
-  double lambda_ = 50.0;
+  double lambda_;
   // Physical parameters (from URDF)
   const double L_ = 6.0; // Distance scaled so L_/2 = 3.0m (Thrusters at X = -3.0)
   const double W_ = 1.2; // Distance scaled so W_/2 = 0.6m (Thrusters at Y = +/-0.6)
@@ -471,6 +504,21 @@ private:
   const double d_u_ = 182.0;  // Surge linear drag
   const double d_v_ = 183.0;  // Sway linear drag
   const double d_r_ = 1199.0; // Yaw linear drag
+  const double d_u_quad_ = 224.0; // Surge quadratic drag (xUU)
+  const double d_v_quad_ = 149.0; // Sway quadratic drag (yVV)
+  const double d_r_quad_ = 979.0; // Yaw quadratic drag (nRR)
+
+  // Define Standard Deviations (sigma)
+  double std_thrust = 0.3;
+  double std_angle = 0.05;
+
+  // Define Variances (sigma^2) for the control penalty math
+  double var_thrust = std_thrust * std_thrust;
+  double var_angle = std_angle * std_angle;
+
+  std::mt19937 gen_{std::random_device{}()};
+  std::normal_distribution<double> noise_thrust_{0.0, 0.4}; // mean = 0.0, stddev = 0.5
+  std::normal_distribution<double> noise_angle_{0.0, 0.1};  // mean = 0.0, stddev = 0.2
 };
 
 int main(int argc, char **argv) {
