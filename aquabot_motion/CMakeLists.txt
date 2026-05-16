@@ -14,10 +14,13 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(visualization_msgs REQUIRED)
 #ament_auto_find_build_dependencies()
 
 
 add_executable(motion_node src/motion_node.cpp)
+# add_executable(motion_node_rey src/motion_node_rey.cpp)
+
 ament_target_dependencies(motion_node
   rclcpp
   nav_msgs
@@ -25,8 +28,10 @@ ament_target_dependencies(motion_node
   std_msgs
   tf2
   tf2_ros
+  visualization_msgs
 )
 target_link_libraries(motion_node Eigen3::Eigen)
+
 
 install(PROGRAMS
 src/cmd.py
@@ -39,6 +44,7 @@ DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS
   motion_node
+  # motion_node_rey
   DESTINATION lib/${PROJECT_NAME}
 )
 

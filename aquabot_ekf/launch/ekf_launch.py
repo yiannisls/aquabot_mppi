@@ -8,7 +8,7 @@ def generate_launch_description():
     sl.declare_arg('manual', True)
 
     with sl.group(if_arg = 'rviz'):
-        sl.rviz(sl.find('ecn_aquabot', 'config.rviz'))
+        sl.rviz(sl.find('ecn_aquabot', 'config_mppi.rviz'))
 
     with sl.group(ns = 'aquabot'):
         # Remappings are to change used to change topic names 
@@ -25,7 +25,10 @@ def generate_launch_description():
                 parameters = [sl.find('aquabot_ekf', 'ekf.yaml')],
                 remappings = {'odometry/filtered': 'odom'})
         
-        sl.node('aquabot_motion', 'motion_node')
+        sl.node('aquabot_motion', 'motion_node',
+                parameters = {'dt': 0.1, 
+                              'horizon': 60, 
+                              'lambda': 50.0})
 
         # mission node
         # sl.node('aquabot_motion', 'mission_turbines.py')
