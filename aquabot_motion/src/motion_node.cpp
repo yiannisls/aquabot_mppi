@@ -347,22 +347,8 @@ Eigen::VectorXd predict_state(const Eigen::VectorXd& state, const Eigen::VectorX
         current_predicted_state_ = predict_state(current_predicted_state_, noisy_control);
 
         // COST it
-        // total_cost_ += cost_function(current_predicted_state_, goal_pose_);
-        // ADD PENALTY R MATRIX
-        
-        // state Cost
-        double state_cost = cost_function(current_predicted_state_, goal_pose_);
-
-        // Information-Theoretic Control Penalty
-        double control_penalty = 0.0;
-        control_penalty += (u_nominal(0) * rollout_noises[k](0, h)) / var_thrust_;
-        control_penalty += (u_nominal(1) * rollout_noises[k](1, h)) / var_thrust_;
-        control_penalty += (u_nominal(2) * rollout_noises[k](2, h)) / var_angle_;
-        control_penalty += (u_nominal(3) * rollout_noises[k](3, h)) / var_angle_;
-
-        // Total Accumulated Cost
-        total_cost_ += state_cost + (lambda_ * control_penalty);
-        
+        total_cost_ += cost_function(current_predicted_state_, goal_pose_);
+                
         // STORE points for visualization
         if (visualize_this_rollout) {
             geometry_msgs::msg::Point p;
@@ -380,7 +366,7 @@ Eigen::VectorXd predict_state(const Eigen::VectorXd& state, const Eigen::VectorX
       }
       rollout_costs[k] = total_cost_;
     }
-    // --- COLOR CODING PASS ---
+    // COLOR CODING PASS 
     // First, find the bounds of our costs to create the gradient
     double min_cost_ = *std::min_element(rollout_costs.begin(), rollout_costs.end());
     double max_cost_ = *std::max_element(rollout_costs.begin(), rollout_costs.end());
@@ -508,13 +494,7 @@ Eigen::VectorXd predict_state(const Eigen::VectorXd& state, const Eigen::VectorX
   const double d_v_quad_ = 149.0; // Sway quadratic drag (yVV)
   const double d_r_quad_ = 979.0; // Yaw quadratic drag (nRR)
 
-  // Define Standard Deviations (sigma)
-  double std_thrust = 0.3;
-  double std_angle = 0.05;
 
-  // Define Variances (sigma^2) for the control penalty math
-  double var_thrust = std_thrust * std_thrust;
-  double var_angle = std_angle * std_angle;
 
   std::mt19937 gen_{std::random_device{}()};
   std::normal_distribution<double> noise_thrust_{0.0, 0.4}; // mean = 0.0, stddev = 0.5
