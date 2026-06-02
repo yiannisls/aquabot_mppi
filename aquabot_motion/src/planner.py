@@ -55,7 +55,7 @@ class Planner(Node):
         # also allow setGoal from RViz
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, node = self)
-        self.goal_pub = self.create_subscription(PoseStamped, 'goal_pose', self.goal_cb, 1)
+        self.goal_pub = self.create_subscription(PoseStamped, '/aquabot/goal_pose', self.goal_cb, 1)
 
     def add_turbines(self, msg: PoseArray):
 
