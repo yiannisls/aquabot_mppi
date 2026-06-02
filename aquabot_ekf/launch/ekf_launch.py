@@ -1,11 +1,11 @@
 from simple_launch import SimpleLauncher
 
-
 def generate_launch_description():
 
+    
     sl = SimpleLauncher(use_sim_time=True)
     sl.declare_arg('rviz', True)
-    sl.declare_arg('manual', True)
+    sl.declare_arg('manual', False)
 
     with sl.group(if_arg = 'rviz'):
         sl.rviz(sl.find('ecn_aquabot', 'config_mppi.rviz'))
@@ -31,8 +31,7 @@ def generate_launch_description():
                               'lambda': 50.0})
 
         # mission node
-        # sl.node('aquabot_motion', 'mission_turbines.py')
-        
+        #sl.node('aquabot_motion', 'mission_turbines.py')
 
     with sl.group(if_arg='manual'):
         sl.node('slider_publisher',
