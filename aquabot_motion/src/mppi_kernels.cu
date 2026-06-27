@@ -58,7 +58,7 @@ __device__ void deriv6(
     // MUST stay identical to calculate_dynamics() on the CPU.
     // With m_u == m_v the yaw term (cor_r) is exactly zero.
     float cor_u =  p.m_v * v * r;            // sway x yaw -> surge
-    float cor_v = -p.m_u * u * r;            // surge x yaw -> sway
+    float cor_v =  -p.m_u * u * r;            // surge x yaw -> sway
     float cor_r =  (p.m_u - p.m_v) * u * v;  // surge x sway -> yaw (0 while m_u==m_v)
 
     ds[0] = (u * cosf(yaw)) - (v * sinf(yaw));   // x_dot
