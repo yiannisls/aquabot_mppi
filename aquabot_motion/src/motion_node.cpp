@@ -479,7 +479,7 @@ private:
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
     rollout_markers.markers.push_back(delete_all);
 
-    int num_visualized = 100; // Safe number of tentacles for RViz
+    int num_visualized = 60; // Safe number of tentacles for RViz
     int step = K_ / num_visualized;
     rclcpp::Time current_time = this->now();
 
@@ -649,10 +649,10 @@ private:
   // --------------
   const double dt_ = 0.1;
   const int horizon_ = 60;                      
-  const int K_ = 6000; 
+  const int K_ = 4000; 
   const double lambda_ = 40.0;                  
   const double update_gain_ = 0.60;             // <--- LOWERED: Adds natural damping
-  const double theta_deadband_ = 0.005;          
+  const double theta_deadband_ = 0.0;          
   const double min_thrusters_clamped = 0.01;    
   const double max_thrusters_clamped = 0.4;    
   const double min_rotation_clamped = -0.3;     
@@ -664,7 +664,7 @@ private:
 
   // ECONOMY BALANCE (The GPU Setup)
   const double dist_weight_ = 35.0;             // superseded by q_cross_/q_along_ (kept for reference)
-  const double q_cross_ = 60.0;                 // <--- CROSS-TRACK: the error that matters (off the line). Weighted hard.
+  const double q_cross_ = 30.0;                 // <--- CROSS-TRACK: the error that matters (off the line). Weighted hard.
   const double q_along_ = 10.0;                  // <--- ALONG-TRACK: loose, so being slightly ahead/behind doesn't fight the speed critic
   const double yaw_weight_ = 60.0;                          
   
