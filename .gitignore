@@ -71,3 +71,13 @@ Thumbs.db
 *.tex.backup
 
 !.gitignore
+
+# MPPI project additions
+log/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.obj
+*.a
+*.bag
+*.mcap
