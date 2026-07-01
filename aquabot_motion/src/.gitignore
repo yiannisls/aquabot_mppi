@@ -1,0 +1,33 @@
+# ROS 2 / colcon
+build/
+install/
+log/
+
+# CUDA / C++ build artifacts
+*.o
+*.obj
+*.so
+*.a
+*.out
+*.exe
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Robot data logs (large -- track via Git LFS if needed, not plain git)
+*.bag
+*.mcap
