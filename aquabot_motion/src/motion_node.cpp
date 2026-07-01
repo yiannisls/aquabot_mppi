@@ -259,6 +259,15 @@ private:
     }
 
     // --- 2. Check if Goal Reached ---
+    // DIAGNOSTIC (no behavior change): expose which index the tracker locked onto,
+    // so we can see if it's picking a sane point (near the approach->circle seam)
+    // vs. jumping to the far end of the plan when the boat is near the ring gap.
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 200,
+      "CLOSEST-PT DEBUG: closest_idx=%zu / %zu total | boat=(%.1f,%.1f) closest_pt=(%.1f,%.1f) dist=%.2f",
+      closest_idx, current_plan_.poses.size(), boat_x, boat_y,
+      current_plan_.poses[closest_idx].pose.position.x,
+      current_plan_.poses[closest_idx].pose.position.y, min_dist);
+
     double final_x = current_plan_.poses.back().pose.position.x;
     double final_y = current_plan_.poses.back().pose.position.y;
     double dist_to_end = std::hypot(final_x - boat_x, final_y - boat_y);
@@ -479,7 +488,7 @@ private:
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
     rollout_markers.markers.push_back(delete_all);
 
-    int num_visualized = 60; // Safe number of tentacles for RViz
+    int num_visualized = 100; // Safe number of tentacles for RViz
     int step = K_ / num_visualized;
     rclcpp::Time current_time = this->now();
 
@@ -653,10 +662,10 @@ private:
   const double lambda_ = 40.0;                  
   const double update_gain_ = 0.60;             // <--- LOWERED: Adds natural damping
   const double theta_deadband_ = 0.0;          
-  const double min_thrusters_clamped = 0.01;    
+  const double min_thrusters_clamped = -0.05;    
   const double max_thrusters_clamped = 0.4;    
-  const double min_rotation_clamped = -0.3;     
-  const double max_rotation_clamped = 0.3; 
+  const double min_rotation_clamped = -0.4;     
+  const double max_rotation_clamped = 0.4; 
        
   const double max_thrust_delta = 0.09;         // <--- MASSIVE DROP. Physically prevents the engines from jumping to 1700 N instantly.
   const double max_angle_delta = 0.05;          // <--- INCREASED: Let the physical boat turn fast enough!
@@ -664,7 +673,7 @@ private:
 
   // ECONOMY BALANCE (The GPU Setup)
   const double dist_weight_ = 35.0;             // superseded by q_cross_/q_along_ (kept for reference)
-  const double q_cross_ = 30.0;                 // <--- CROSS-TRACK: the error that matters (off the line). Weighted hard.
+  const double q_cross_ = 60.0;                 // <--- CROSS-TRACK: the error that matters (off the line). Weighted hard.
   const double q_along_ = 10.0;                  // <--- ALONG-TRACK: loose, so being slightly ahead/behind doesn't fight the speed critic
   const double yaw_weight_ = 60.0;                          
   

@@ -125,10 +125,10 @@ __global__ void mppi_rollout_kernel(
         abs_a_R += rate_a_R * params.dt;
 
         // Clamp to physical limits  (thrust floor now 0.01 to MATCH the CPU)
-        abs_T_L = fmaxf(0.01f, fminf(abs_T_L, 0.40f));
-        abs_T_R = fmaxf(0.01f, fminf(abs_T_R, 0.40f));
-        abs_a_L = fmaxf(-0.30f, fminf(abs_a_L, 0.30f));
-        abs_a_R = fmaxf(-0.30f, fminf(abs_a_R, 0.30f));
+        abs_T_L = fmaxf(-0.05f, fminf(abs_T_L, 0.40f));
+        abs_T_R = fmaxf(-0.05f, fminf(abs_T_R, 0.40f));
+        abs_a_L = fmaxf(-0.40f, fminf(abs_a_L, 0.40f));
+        abs_a_R = fmaxf(-0.40f, fminf(abs_a_R, 0.40f));
 
         // ---------- RK4 integration of the 6-state, frozen controls ----------
         float k1[6], k2[6], k3[6], k4[6], tmp[6];
