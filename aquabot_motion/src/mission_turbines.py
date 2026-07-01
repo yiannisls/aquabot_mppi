@@ -11,7 +11,6 @@
 # Contract with the (separate) QR node:
 #   - OUT: /aquabot/current_target  (PoseStamped)  -> which turbine we're orbiting
 #   - IN : /aquabot/qr_facing       (PoseStamped)  -> QR decoded + facing direction
-# The qr_facing hook is a no-op today; it will later trigger the hold phase.
 
 import rclpy
 from rclpy.node import Node
@@ -48,7 +47,7 @@ class MissionControl(Node):
         self.get_logger().info("Mission Control Online (continuous-circle)!")
 
         # ---------- tunables ----------
-        self.orbit_radius = 15.0          # inspection ring radius [m]
+        self.orbit_radius = 18.0          # inspection ring radius [m]
         self.orbit_points = 36            # density of the analytic circle
         self.orbit_arc_deg = 340.0        # path arc; < 360 so start/end don't overlap
         self.orbit_direction = +1         # +1 = counter-clockwise, -1 = clockwise
