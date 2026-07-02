@@ -18,6 +18,9 @@
 #include <geometry_msgs/msg/point.hpp>
 #include <random>
 #include <omp.h>
+#include <fstream>
+#include <iomanip>
+#include <ctime>
 
 struct MPPIParams {
     int horizon;
@@ -71,6 +74,19 @@ public:
 
     rollout_costs_.assign(K_, 0.0);
     rollout_noises_.assign(K_, Eigen::MatrixXd::Zero(4, horizon_));
+
+    // --- CSV logging for post-run analysis (path tracking, speed, effort) ---
+    auto t = std::time(nullptr);
+    char fname[128];
+    std::strftime(fname, sizeof(fname), "/tmp/aquabot_run_%Y%m%d_%H%M%S.csv", std::localtime(&t));
+    log_file_.open(fname);
+    log_file_ << "time,x,y,yaw,speed,speed_error,cross_track_error,yaw_rate,"
+                 "thrust_L,thrust_R,steer_L,steer_R,min_cost\n";
+    RCLCPP_INFO(this->get_logger(), "Logging run data to %s", fname);
+  }
+
+  ~AquabotController() {
+    if (log_file_.is_open()) log_file_.close();
   }
 
 private:
@@ -259,15 +275,6 @@ private:
     }
 
     // --- 2. Check if Goal Reached ---
-    // DIAGNOSTIC (no behavior change): expose which index the tracker locked onto,
-    // so we can see if it's picking a sane point (near the approach->circle seam)
-    // vs. jumping to the far end of the plan when the boat is near the ring gap.
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 200,
-      "CLOSEST-PT DEBUG: closest_idx=%zu / %zu total | boat=(%.1f,%.1f) closest_pt=(%.1f,%.1f) dist=%.2f",
-      closest_idx, current_plan_.poses.size(), boat_x, boat_y,
-      current_plan_.poses[closest_idx].pose.position.x,
-      current_plan_.poses[closest_idx].pose.position.y, min_dist);
-
     double final_x = current_plan_.poses.back().pose.position.x;
     double final_y = current_plan_.poses.back().pose.position.y;
     double dist_to_end = std::hypot(final_x - boat_x, final_y - boat_y);
@@ -350,16 +357,16 @@ private:
 
     auto t_ref = std::chrono::steady_clock::now();
 
-    // --- 4. MPPI AI Imagination Phase ---
+    // 4. MPPI Phase 
 
     // 1. Generate noise on CPU (common mode + small differential mode per channel)
     std::vector<float> h_noise(K_ * horizon_ * 4);
 
-    // TELL THE COMPILER TO SPLIT THIS LOOP ACROSS ALL CPU CORES!
+    // SPLIT THIS LOOP ACROSS ALL CPU CORES!
     #pragma omp parallel for
     for(int k=0; k<K_; k++){
 
-      // THREAD-SAFE RNG: each core gets its own generator AND its own distributions
+      // thread-safe: each core gets its own generator and its own distributions
       unsigned seed = std::chrono::system_clock::now().time_since_epoch().count() + k;
       std::mt19937 local_gen(seed);
 
@@ -457,7 +464,7 @@ private:
     params.steer_weight = steer_weight_;
     params.target_speed = target_speed_;   // <-- fixed cruise target (1.3 m/s)
 
-    // 3. Ship it to the GPU to do the heavy lifting!
+    // 3. Send to the GPU 
     launch_mppi_cuda(
         h_initial_state, 
         h_nominal_U.data(), 
@@ -468,7 +475,7 @@ private:
         K_
     );
 
-    // 4. Retrieve costs
+    // 4. Retrieve the costs from GPU and store them in rollout_costs_
     for (int k = 0; k < K_; k++) {
         rollout_costs_[k] = h_costs[k];
     }
@@ -479,7 +486,7 @@ private:
     double max_cost_ = *std::max_element(rollout_costs_.begin(), rollout_costs_.end());
     (void)max_cost_;  // currently unused
 
-    // --- 5. VISUALIZE THE AI'S IMAGINATION (throttled: debug overlay only) ---
+    // --- 5. VISUALIZE THE ROLL-OUTS IN RVIZ ---
     if (loop_count_++ % 10 == 0) {
     visualization_msgs::msg::MarkerArray rollout_markers;
     
@@ -488,7 +495,7 @@ private:
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
     rollout_markers.markers.push_back(delete_all);
 
-    int num_visualized = 100; // Safe number of tentacles for RViz
+    int num_visualized = 60; // Safe number of tentacles for RViz
     int step = K_ / num_visualized;
     rclcpp::Time current_time = this->now();
 
@@ -588,6 +595,19 @@ private:
     pub_al_->publish(msg_al);
     pub_ar_->publish(msg_ar);
 
+    // --- Log this cycle's tracking/effort data ---
+    // min_dist: perpendicular-ish distance to the nearest path point, computed
+    // above in step 1 (closest-point search) -- reused here as cross-track error.
+    log_file_ << std::fixed << std::setprecision(4)
+              << this->now().seconds() << ","
+              << boat_x << "," << boat_y << "," << current_state_(2) << ","
+              << current_speed << "," << (target_speed_ - current_speed) << ","
+              << min_dist << "," << current_state_(5) << ","
+              << msg_fl.data << "," << msg_fr.data << ","
+              << msg_al.data << "," << msg_ar.data << ","
+              << min_cost_ << "\n";
+    log_file_.flush();
+
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500,
       "Commanding Thrusters -> L: %.2f N, R: %.2f N | Angles -> L: %.2f rad, R: %.2f rad", msg_fl.data, msg_fr.data, msg_al.data, msg_ar.data);
 
@@ -641,6 +661,7 @@ private:
   
   std::vector<double> rollout_costs_;
   std::vector<Eigen::MatrixXd> rollout_noises_;
+  std::ofstream log_file_;
 
   const double L_ = 6.0; 
   const double W_ = 1.2; 
