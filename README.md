@@ -4,10 +4,11 @@
 
 This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github.com/oKermorgant/aquabot) by O. Kermorgant, itself adapted from the [Sirehna Aquabot Challenge](https://github.com/sirehna/aquabot). The lab scaffolding (simulator, EKF localization, base planner/control interfaces) comes from that repo — what's added here is a full GPU SMPPI controller, a rock-aware global planner, and a continuous-orbit inspection mission.
 
-<img src="docs/demo.gif" width="600" alt="demo">
-
-<!-- TODO: full-mission video embed here once uploaded via GitHub's drag-and-drop
-(see Results section) -->
+<div align="center">
+  <img src="docs/demo.gif" width="500" alt="demo">
+  <br>
+  <em>SMPPI (Smooth Model Predictive Path Integral) controller tracking the inspection path</em>
+</div>
 
 ## Table of contents
 
@@ -16,9 +17,10 @@ This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github
 - [Architecture](#architecture)
 - [Controller: Smooth MPPI](#controller-smooth-mppi)
 - [Global planner](#global-planner-rock-aware-a)
+- [Obstacle avoidance](#obstacle-avoidance)
 - [Mission: continuous turbine inspection](#mission-continuous-turbine-inspection)
-- [QR inspection](#qr-inspection-in-progress)
 - [Results](#results)
+- [QR inspection](#qr-inspection-in-progress)
 - [Roadmap](#roadmap--known-limitations)
 - [Acknowledgments](#acknowledgments)
 - [License](#license)
@@ -44,7 +46,9 @@ Everything runs over ROS 2 topics in the `/aquabot` namespace — see the [base 
 
 ## Architecture
 
-<img src="docs/architecture.svg" width="640" alt="architecture">
+<div align="center">
+  <img src="docs/architecture.svg" width="440" alt="architecture">
+</div>
 
 Sensors flow through the course's EKF into `/odom`. The turbine AIS positions feed an A\* planner, which the mission state machine calls once per turbine to get an approach leg, then appends a dense analytic circle to it — publishing one continuous path rather than a string of waypoints. The SMPPI controller tracks that path: reference-trajectory construction, noise sampling and the control update run on the CPU (OpenMP), while the actual rollout simulation and cost evaluation for all K trajectories run in parallel on the GPU (CUDA). A separate QR-reading node watches the camera independently.
 
@@ -87,10 +91,6 @@ A 3-DOF Fossen surge/sway/yaw model, identical on CPU (used to publish the predi
 
 All `K × horizon` noise draws are generated CPU-side with OpenMP across cores, then shipped to the GPU alongside the current state and nominal control sequence. `mppi_rollout_kernel` assigns one CUDA thread per rollout, forward-simulates the full horizon, and returns a single cost per rollout.
 
-### Reference trajectory — the "ghost boat"
-
-Rather than tracking a fixed-speed carrot, the reference point walks along `/aquabot/plan` at a speed that adapts to the boat's *current* speed (floored at a minimum, led by a small acceleration margin, capped at cruise target). This keeps the reference from running away from a boat that's still accelerating, while still pulling it up to cruise speed.
-
 ### Cost function
 
 Evaluated once per rollout per horizon step, summed over the horizon:
@@ -108,6 +108,10 @@ Evaluated once per rollout per horizon step, summed over the horizon:
 ### Control update & receding horizon
 
 Rollout costs are converted to importance weights via `w_k ∝ exp(-(cost_k − min_cost)/λ)`, normalized, and used to nudge the nominal control-rate sequence toward the lower-cost rollouts. The rate sequence is clamped to prevent windup, the first step is integrated and published, and the whole sequence is shifted left by one step (receding horizon) with the tail zero-padded for the next cycle.
+
+### Reference trajectory — the "ghost boat"
+
+Rather than tracking a fixed-speed carrot, the reference point walks along `/aquabot/plan` at a speed that adapts to the boat's *current* speed (floored at a minimum, led by a small acceleration margin, capped at cruise target). This keeps the reference from running away from a boat that's still accelerating, while still pulling it up to cruise speed.
 
 ### CPU/GPU split
 
@@ -134,6 +138,20 @@ On an RTX ????, a full 4000-rollout × 60-step cycle takes ~?? ms, leaving headr
 - A `goal_pose` subscription for RViz's **2D Goal Pose** button (uses the boat's current pose as start)
 - Obstacle markers published for RViz visualization
 
+## Obstacle avoidance
+
+Before running the full inspection mission, this shorter (150 s) run isolates one job: prove the planner routes cleanly around fixed obstacles and the SMPPI controller tracks that route without cutting corners. The boat is given a goal on the far side of a cluster of rocks and islands, so its only way through is a path that weaves between the no-go zones the planner builds around each obstacle.
+
+The video below shows the run side by side in Gazebo (left) and RViz (right) — in RViz you can see the planned A\* path, the obstacle markers, and the MPPI rollout "tentacles" fanning out ahead of the boat as it picks its way through.
+
+<div align="center">
+
+https://github.com/user-attachments/assets/6beaf017-1508-4a7c-a9b6-7287dc1c2a85
+
+</div>
+
+The quantitative tracking results for this run are reported alongside the full-mission numbers in [Results](#results).
+
 ## Mission: continuous turbine inspection
 
 `mission_turbines.py` runs a small state machine (`WAITING_FOR_DATA → PLAN_APPROACH → WAITING_FOR_PLAN → ORBITING → …`) that, for each turbine in turn:
@@ -144,13 +162,18 @@ On an RTX ????, a full 4000-rollout × 60-step cycle takes ~?? ms, leaving headr
 
 The single-path design is deliberate: driving discrete stop-and-go waypoints around a turbine saturates the tracker's steering and causes oscillation. One smooth path lets the SMPPI controller stay in its comfortable tracking regime the whole way round. Once a turbine's orbit sweeps its configured completion arc, the mission advances to the next turbine's approach — the boat never fully stops between turbines.
 
-## QR inspection (in progress)
+<!-- Full-mission video (uploaded via GitHub web editor -> CDN). GitHub auto-renders
+     a bare user-attachments URL on its own line as a player. -->
 
-`qr_reader.py` currently covers step 1 of the optional challenge: prove decoding works. It runs OpenCV's QR detector through four strategies in order (plain → curved → 2× upscaled → Otsu-binarized), logs how much of the frame the code covers and its aspect ratio (to find the usable read range), and republishes each newly-seen code to `/vrx/windturbinesinspection/windturbine_checkup`.
+<div align="center">
 
-Not yet wired: camera aiming, facing-direction computation, and handing off to the mission's 30-second station-keep + round-turn once all codes are read.
+https://github.com/user-attachments/assets/686747a6-ec6d-459a-9f93-bcc864f7d64e
+
+</div>
 
 ## Results
+
+### Full inspection mission
 
 Measured over a full 4-turbine inspection run (451 s, logged at 10 Hz):
 
@@ -164,37 +187,41 @@ Measured over a full 4-turbine inspection run (451 s, logged at 10 Hz):
 
 \*excludes a ±3 s window around each of the 4 turbine-to-turbine transitions — the numbers that actually reflect the controller's tracking quality, isolated from planner latency (see below).
 
-<img src="docs/plots/full_run/path_tracking.png" width="420" alt="path tracking">
+<div align="center">
+  <img src="docs/plots/full_run/path_tracking.png" width="420" alt="path tracking">
+</div>
 
 The boat holds the planned path tightly through both full orbits and both approach legs — cross-track error stays under ~0.5 m for the large majority of the run. There's one clear outlier.
 
-<img src="docs/plots/full_run/speed_profile.png" width="49%" alt="speed profile">
-<img src="docs/plots/full_run/cross_track_error.png" width="49%" alt="cross-track error over time">
+<div align="center">
+  <img src="docs/plots/full_run/speed_profile.png" width="48%" alt="speed profile">
+  <img src="docs/plots/full_run/cross_track_error.png" width="48%" alt="cross-track error over time">
+</div>
 
 Four turbine-to-turbine transitions show up as brief deviation spikes (shaded above), three of them small (1.5–2.5 m peak, under ~14 s). The second one is a genuine outlier — 6.97 m peak, sustained for 16 s. It's not a control failure: `mission_turbines.py` calls the A\* planner **asynchronously** when an orbit completes and waits for the new approach path before advancing state; the MPPI controller keeps tracking the *old* plan (whose last waypoint the boat has already passed) until the new one arrives. That specific hop happened to be the longest inter-turbine leg in the run, so the planner call took longer and the boat drifted further before snapping onto the fresh path. See [Roadmap](#roadmap--known-limitations).
 
-<!-- Full-mission video (uploaded via GitHub web editor -> CDN). GitHub auto-renders
-     a bare user-attachments URL on its own line as a player; width is not honored here. -->
+### Obstacle avoidance run
 
-https://github.com/user-attachments/assets/686747a6-ec6d-459a-9f93-bcc864f7d64e
+The [obstacle-avoidance run](#obstacle-avoidance) above, measured the same way:
 
-## Obstacle avoidance
-
-A shorter (150 s) run isolating the planner routing around fixed obstacles and the SMPPI controller tracking that route:
-
-<img src="docs/plots/obstacle_avoidance/path_tracking.png" width="360" alt="obstacle avoidance path">
+<div align="center">
+  <img src="docs/plots/obstacle_avoidance/path_tracking.png" width="300" alt="obstacle avoidance path">
+</div>
 
 The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 m clearance) and passes `rock_3` at t≈113s (26.9 m clearance) — all three from the planner's fixed obstacle list in `planner.py`. Cross-track error during both passages is the tightest of the whole run (0.06–0.16 m), tighter than the 0.5 m steady-state average from the turbine mission.
 
-<img src="docs/plots/obstacle_avoidance/speed_profile.png" width="49%" alt="obstacle avoidance speed">
-<img src="docs/plots/obstacle_avoidance/cross_track_error.png" width="49%" alt="obstacle avoidance cross-track error">
+<div align="center">
+  <img src="docs/plots/obstacle_avoidance/speed_profile.png" width="48%" alt="obstacle avoidance speed">
+  <img src="docs/plots/obstacle_avoidance/cross_track_error.png" width="48%" alt="obstacle avoidance cross-track error">
+</div>
 
 Mean speed 1.264 m/s, mean cross-track error 0.345 m over the full run. The largest single deviation (1.86 m, t≈6.6s) is the same cold-start transient seen in the main mission, not an avoidance correction — the steering/yaw-rate peaks for this run cluster entirely in that first ~8s window, well before either obstacle passage.
 
-<!-- Obstacle-avoidance video (Gazebo + RViz side by side), uploaded via GitHub web
-     editor -> CDN. GitHub auto-renders a bare user-attachments URL as a player. -->
+## QR inspection (in progress)
 
-https://github.com/user-attachments/assets/6beaf017-1508-4a7c-a9b6-7287dc1c2a85
+`qr_reader.py` currently covers step 1 of the optional challenge: prove decoding works. It runs OpenCV's QR detector through four strategies in order (plain → curved → 2× upscaled → Otsu-binarized), logs how much of the frame the code covers and its aspect ratio (to find the usable read range), and republishes each newly-seen code to `/vrx/windturbinesinspection/windturbine_checkup`.
+
+Not yet wired: camera aiming, facing-direction computation, and handing off to the mission's 30-second station-keep + round-turn once all codes are read.
 
 ## Roadmap / known limitations
 
