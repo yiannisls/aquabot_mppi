@@ -6,8 +6,7 @@ This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github
 
 ![demo](docs/demo.gif)
 
-<!-- TODO: full-mission video embed here once uploaded via GitHub's drag-and-drop
-(see Results section) -->
+
 
 ## Table of contents
 
@@ -147,7 +146,8 @@ The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 
 
 Mean speed 1.264 m/s, mean cross-track error 0.345 m over the full run. The largest single deviation (1.86 m, t≈6.6s) is the same cold-start transient seen in the main mission, not an avoidance correction — the steering/yaw-rate peaks for this run cluster entirely in that first ~8s window, well before either obstacle passage.
 
-<!-- TODO: side-by-side Gazebo + RViz video here -->
+<!-- : side-by-side Gazebo + RViz video here -->
+https://github.com/user-attachments/assets/6beaf017-1508-4a7c-a9b6-7287dc1c2a85
 
 ## Mission: continuous turbine inspection
 
@@ -188,8 +188,9 @@ The boat holds the planned path tightly through both full orbits and both approa
 
 Four turbine-to-turbine transitions show up as brief deviation spikes (shaded above), three of them small (1.5–2.5 m peak, under ~14 s). The second one is a genuine outlier — 6.97 m peak, sustained for 16 s. It's not a control failure: `mission_turbines.py` calls the A\* planner **asynchronously** when an orbit completes and waits for the new approach path before advancing state; the MPPI controller keeps tracking the *old* plan (whose last waypoint the boat has already passed) until the new one arrives. That specific hop happened to be the longest inter-turbine leg in the run, so the planner call took longer and the boat drifted further before snapping onto the fresh path. See [Roadmap](#roadmap--known-limitations).
 
-<!-- TODO: hero/full-mission video links here once uploaded -->
+<!-- hero/full-mission video links here -->
 
+https://github.com/user-attachments/assets/686747a6-ec6d-459a-9f93-bcc864f7d64e
 
 ## Roadmap / known limitations
 
