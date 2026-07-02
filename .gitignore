@@ -83,5 +83,5 @@ compile_commands.json
 *.mcap
 
 # Videos hosted via GitHub's CDN (drag-and-drop), not committed to git
-docs/plots/**/*.mp4
-docs/plots/**/*.webm
+docs/**/*.mp4
+docs/**/*.webm
