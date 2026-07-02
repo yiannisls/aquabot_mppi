@@ -188,18 +188,18 @@ Measured over a full 3-turbine inspection run (451 s, logged at 10 Hz):
 \*excludes a ±3 s window around each of the 3 turbine-to-turbine transitions — the numbers that actually reflect the controller's tracking quality, isolated from planner latency (see below).
 
 <div align="center">
-  <img src="docs/plots/full_run/path_tracking.png" width="520" alt="path tracking">
+  <img src="docs/plots/full_run/path_tracking.png" width="550" alt="path tracking">
 </div>
 
 The boat holds the planned path tightly through both full orbits and both approach legs — cross-track error stays under ~0.5 m for the large majority of the run. There's one clear outlier.
 
 <div align="center">
-  <img src="docs/plots/full_run/speed_profile.png" width="80%" alt="speed profile">
+  <img src="docs/plots/full_run/speed_profile.png" width="70%" alt="speed profile">
 
 </div>
 
 <div align="center">
-  <img src="docs/plots/full_run/cross_track_error.png" width="80%" alt="cross-track error over time">
+  <img src="docs/plots/full_run/cross_track_error.png" width="70%" alt="cross-track error over time">
 </div>
 
 Four turbine-to-turbine transitions show up as brief deviation spikes (shaded above), three of them small (1.5–2.5 m peak, under ~14 s). The second one is a genuine outlier — 6.97 m peak, sustained for 16 s. It's not a control failure: `mission_turbines.py` calls the A\* planner **asynchronously** when an orbit completes and waits for the new approach path before advancing state; the MPPI controller keeps tracking the *old* plan (whose last waypoint the boat has already passed) until the new one arrives. That specific hop happened to be the longest inter-turbine leg in the run, so the planner call took longer and the boat drifted further before snapping onto the fresh path. See [Roadmap](#roadmap--known-limitations).
@@ -209,18 +209,18 @@ Four turbine-to-turbine transitions show up as brief deviation spikes (shaded ab
 The [obstacle-avoidance run](#obstacle-avoidance) above, measured the same way:
 
 <div align="center">
-  <img src="docs/plots/obstacle_avoidance/path_tracking_new.png" width="150" alt="obstacle avoidance path">
+  <img src="docs/plots/obstacle_avoidance/path_tracking_new.png" width="300" alt="obstacle avoidance path">
 </div>
 
 The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 m clearance) and passes `rock_3` at t≈113s (26.9 m clearance) — all three from the planner's fixed obstacle list in `planner.py`. Cross-track error during both passages is the tightest of the whole run (0.06–0.16 m), tighter than the 0.5 m steady-state average from the turbine mission.
 
 <div align="center">
-  <img src="docs/plots/obstacle_avoidance/speed_profile.png" width="80%" alt="obstacle avoidance speed">
+  <img src="docs/plots/obstacle_avoidance/speed_profile.png" width="70%" alt="obstacle avoidance speed">
 
 </div>
 
 <div align="center">
-  <img src="docs/plots/obstacle_avoidance/cross_track_error.png" width="80%" alt="obstacle avoidance cross-track error">
+  <img src="docs/plots/obstacle_avoidance/cross_track_error.png" width="70%" alt="obstacle avoidance cross-track error">
 </div>
 
 
