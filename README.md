@@ -4,7 +4,7 @@
 
 This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github.com/oKermorgant/aquabot) by O. Kermorgant, itself adapted from the [Sirehna Aquabot Challenge](https://github.com/sirehna/aquabot). The lab scaffolding (simulator, EKF localization, base planner/control interfaces) comes from that repo — what's added here is a full GPU SMPPI controller, a rock-aware global planner, and a continuous-orbit inspection mission.
 
-![demo](docs/demo.gif)
+<img src="docs/demo.gif" width="600" alt="demo">
 
 <!-- TODO: full-mission video embed here once uploaded via GitHub's drag-and-drop
 (see Results section) -->
@@ -44,7 +44,7 @@ Everything runs over ROS 2 topics in the `/aquabot` namespace — see the [base 
 
 ## Architecture
 
-![architecture](docs/architecture.svg)
+<img src="docs/architecture.svg" width="640" alt="architecture">
 
 Sensors flow through the course's EKF into `/odom`. The turbine AIS positions feed an A\* planner, which the mission state machine calls once per turbine to get an approach leg, then appends a dense analytic circle to it — publishing one continuous path rather than a string of waypoints. The SMPPI controller tracks that path: reference-trajectory construction, noise sampling and the control update run on the CPU (OpenMP), while the actual rollout simulation and cost evaluation for all K trajectories run in parallel on the GPU (CUDA). A separate QR-reading node watches the camera independently.
 
@@ -134,21 +134,6 @@ On an RTX ????, a full 4000-rollout × 60-step cycle takes ~?? ms, leaving headr
 - A `goal_pose` subscription for RViz's **2D Goal Pose** button (uses the boat's current pose as start)
 - Obstacle markers published for RViz visualization
 
-### Obstacle avoidance demo
-
-A shorter (150 s) run isolating the planner routing around fixed obstacles and the SMPPI controller tracking that route:
-
-![obstacle avoidance path](docs/plots/obstacle_avoidance/path_tracking.png)
-
-The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 m clearance) and passes `rock_3` at t≈113s (26.9 m clearance) — all three from the planner's fixed obstacle list in `planner.py`. Cross-track error during both passages is the tightest of the whole run (0.06–0.16 m), tighter than the 0.5 m steady-state average from the turbine mission.
-
-![obstacle avoidance speed](docs/plots/obstacle_avoidance/speed_profile.png)
-![obstacle avoidance cross-track error](docs/plots/obstacle_avoidance/cross_track_error.png)
-
-Mean speed 1.264 m/s, mean cross-track error 0.345 m over the full run. The largest single deviation (1.86 m, t≈6.6s) is the same cold-start transient seen in the main mission, not an avoidance correction — the steering/yaw-rate peaks for this run cluster entirely in that first ~8s window, well before either obstacle passage.
-
-<!-- TODO: side-by-side Gazebo + RViz video here -->
-
 ## Mission: continuous turbine inspection
 
 `mission_turbines.py` runs a small state machine (`WAITING_FOR_DATA → PLAN_APPROACH → WAITING_FOR_PLAN → ORBITING → …`) that, for each turbine in turn:
@@ -179,17 +164,35 @@ Measured over a full 4-turbine inspection run (451 s, logged at 10 Hz):
 
 \*excludes a ±3 s window around each of the 4 turbine-to-turbine transitions — the numbers that actually reflect the controller's tracking quality, isolated from planner latency (see below).
 
-![path tracking](docs/plots/full_run/path_tracking.png)
+<img src="docs/plots/full_run/path_tracking.png" width="420" alt="path tracking">
 
 The boat holds the planned path tightly through both full orbits and both approach legs — cross-track error stays under ~0.5 m for the large majority of the run. There's one clear outlier.
 
-![speed profile](docs/plots/full_run/speed_profile.png)
-![cross-track error over time](docs/plots/full_run/cross_track_error.png)
+<img src="docs/plots/full_run/speed_profile.png" width="49%" alt="speed profile">
+<img src="docs/plots/full_run/cross_track_error.png" width="49%" alt="cross-track error over time">
 
 Four turbine-to-turbine transitions show up as brief deviation spikes (shaded above), three of them small (1.5–2.5 m peak, under ~14 s). The second one is a genuine outlier — 6.97 m peak, sustained for 16 s. It's not a control failure: `mission_turbines.py` calls the A\* planner **asynchronously** when an orbit completes and waits for the new approach path before advancing state; the MPPI controller keeps tracking the *old* plan (whose last waypoint the boat has already passed) until the new one arrives. That specific hop happened to be the longest inter-turbine leg in the run, so the planner call took longer and the boat drifted further before snapping onto the fresh path. See [Roadmap](#roadmap--known-limitations).
 
-<!-- TODO: hero/full-mission video links here once uploaded -->
+<!-- Full-mission video: replace SRC_URL with the github.com/user-attachments/... URL
+     you get by dragging the mp4 into GitHub's web editor. Adjust width to taste. -->
+<video src="SRC_URL" width="640" controls></video>
 
+## Obstacle avoidance
+
+A shorter (150 s) run isolating the planner routing around fixed obstacles and the SMPPI controller tracking that route:
+
+<img src="docs/plots/obstacle_avoidance/path_tracking.png" width="360" alt="obstacle avoidance path">
+
+The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 m clearance) and passes `rock_3` at t≈113s (26.9 m clearance) — all three from the planner's fixed obstacle list in `planner.py`. Cross-track error during both passages is the tightest of the whole run (0.06–0.16 m), tighter than the 0.5 m steady-state average from the turbine mission.
+
+<img src="docs/plots/obstacle_avoidance/speed_profile.png" width="49%" alt="obstacle avoidance speed">
+<img src="docs/plots/obstacle_avoidance/cross_track_error.png" width="49%" alt="obstacle avoidance cross-track error">
+
+Mean speed 1.264 m/s, mean cross-track error 0.345 m over the full run. The largest single deviation (1.86 m, t≈6.6s) is the same cold-start transient seen in the main mission, not an avoidance correction — the steering/yaw-rate peaks for this run cluster entirely in that first ~8s window, well before either obstacle passage.
+
+<!-- Obstacle-avoidance video (Gazebo + RViz side by side): replace SRC_URL with the
+     github.com/user-attachments/... URL from GitHub's web editor. Adjust width to taste. -->
+<video src="SRC_URL" width="640" controls></video>
 
 ## Roadmap / known limitations
 
