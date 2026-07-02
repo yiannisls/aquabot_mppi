@@ -7,7 +7,7 @@ This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github
 <div align="center">
   <img src="docs/demo.gif" width="500" alt="demo">
   <br>
-  <em>SMPPI (Smooth Model Predictive Path Integral) controller tracking the inspection path</em>
+  <em>SMPPI (Smooth Model Predictive Path Integral) controller tracking the  path</em>
 </div>
 
 ## Table of contents
@@ -47,7 +47,7 @@ Everything runs over ROS 2 topics in the `/aquabot` namespace — see the [base 
 ## Architecture
 
 <div align="center">
-  <img src="docs/architecture.svg" width="440" alt="architecture">
+  <img src="docs/architecture.svg" width="480" alt="architecture">
 </div>
 
 Sensors flow through the course's EKF into `/odom`. The turbine AIS positions feed an A\* planner, which the mission state machine calls once per turbine to get an approach leg, then appends a dense analytic circle to it — publishing one continuous path rather than a string of waypoints. The SMPPI controller tracks that path: reference-trajectory construction, noise sampling and the control update run on the CPU (OpenMP), while the actual rollout simulation and cost evaluation for all K trajectories run in parallel on the GPU (CUDA). A separate QR-reading node watches the camera independently.
@@ -142,7 +142,7 @@ On an RTX ????, a full 4000-rollout × 60-step cycle takes ~?? ms, leaving headr
 
 Before running the full inspection mission, this shorter (150 s) run isolates one job: prove the planner routes cleanly around fixed obstacles and the SMPPI controller tracks that route without cutting corners. The boat is given a goal on the far side of a cluster of rocks and islands, so its only way through is a path that weaves between the no-go zones the planner builds around each obstacle.
 
-The video below shows the run side by side in Gazebo (left) and RViz (right) — in RViz you can see the planned A\* path, the obstacle markers, and the MPPI rollout "tentacles" fanning out ahead of the boat as it picks its way through.
+The video below shows the run side by side in RViz (left) and Gazebo (right) — in RViz you can see the planned A\* path, the obstacle markers, and the MPPI rollout "tentacles" fanning out ahead of the boat as it picks its way through.
 
 <div align="center">
 
@@ -209,7 +209,7 @@ Four turbine-to-turbine transitions show up as brief deviation spikes (shaded ab
 The [obstacle-avoidance run](#obstacle-avoidance) above, measured the same way:
 
 <div align="center">
-  <img src="docs/plots/obstacle_avoidance/path_tracking_new.png" width="350" alt="obstacle avoidance path">
+  <img src="docs/plots/obstacle_avoidance/path_tracking_new.png" width="150" alt="obstacle avoidance path">
 </div>
 
 The boat threads between `rock_island_0` and `rock_2` at t≈78s (30.0 m / 26.4 m clearance) and passes `rock_3` at t≈113s (26.9 m clearance) — all three from the planner's fixed obstacle list in `planner.py`. Cross-track error during both passages is the tightest of the whole run (0.06–0.16 m), tighter than the 0.5 m steady-state average from the turbine mission.
