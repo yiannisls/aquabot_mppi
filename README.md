@@ -18,8 +18,6 @@ or link a video: [Watch the full inspection run](docs/demo.mp4)
 - [Global planner](#global-planner-rock-aware-a)
 - [Mission: continuous turbine inspection](#mission-continuous-turbine-inspection)
 - [QR inspection](#qr-inspection-in-progress)
-- [Installation](#installation)
-- [Usage](#usage)
 - [Results](#results)
 - [Roadmap](#roadmap--known-limitations)
 - [Acknowledgments](#acknowledgments)
@@ -27,31 +25,34 @@ or link a video: [Watch the full inspection run](docs/demo.mp4)
 
 ## Overview
 
-The simulation drops an autonomous boat — two independently steerable azimuth thrusters (±π/4), a pan camera — into a Gazebo world scattered with islands, rocks, and wind turbines. Each turbine carries a QR code on one side. The boat has to:
+The simulation is about an autonomous boat with 4 inputs — 2 thruster inputs and 2 steerable azimuth thruster angles — set in a Gazebo world with islands, rocks, and wind turbines. Each turbine carries a QR code on one side.
 
-1. Localize itself and the turbines from noisy GPS/IMU/AIS data
-2. Plan a route through the field without hitting any rock or island
-3. Track that route accurately enough to hold a tight orbit around each turbine
-4. Read every QR code, then station-keep in front of a pinger-designated turbine for a final inspection pass
+The goal is to build a controller that can follow a planned trajectory closely enough to inspect every turbine — reading its QR code while orbiting, then holding station in front of a pinger-designated turbine for a final close-up pass.
+
+We chose Model Predictive Path Integral (MPPI) control for this because the boat's dynamics are full of nonlinearities — drag, actuator saturation, coupled surge/sway/yaw motion — that a sampling-based controller like MPPI handles naturally, without needing to linearize anything.
 
 Everything runs over ROS 2 topics in the `/aquabot` namespace — see the [base repo](https://github.com/oKermorgant/aquabot) for the full topic/message reference.
 
 ## What this fork adds
 
-| Component | File(s) | Replaces / adds |
+| Component | File(s) | Description |
 |---|---|---|
-| SMPPI controller | `motion_node.cpp`, `mppi_kernels.cu` | the baseline PID velocity tracker |
-| Rock-aware global planner | `planner.py` | — (bitangent visibility-graph A\*) |
-| Continuous orbit mission | `mission_turbines.py` | discrete stop-and-go waypoint inspection |
-| QR decoding | `qr_reader.py` | — (multi-strategy OpenCV decode, WIP) |
+| GPU MPPI controller | `motion_node.cpp`, `mppi_kernels.cu` | Smooth MPPI trajectory tracking — rollout simulation and cost evaluation run on the GPU |
+| Global planner | `planner.py` | A\* over a bitangent visibility graph around obstacles and turbines |
+| Continuous orbit mission | `mission_turbines.py` | one continuous approach-and-orbit path per turbine, instead of discrete stop-and-go waypoints |
+| QR decoding | `qr_reader.py` | OpenCV-based decode of turbine QR codes, publishes to the checkup topic (WIP) |
 
 ## Architecture
 
 ![architecture](docs/architecture.svg)
 
-Sensors flow through the course's EKF into `/odom`. The turbine AIS positions feed a rock-aware A\* planner, which the mission state machine calls once per turbine to get an approach leg, then appends a dense analytic circle to it — publishing one continuous path rather than a string of waypoints. The SMPPI controller tracks that path: reference-trajectory construction, noise sampling and the control update run on the CPU (OpenMP), while the actual rollout simulation and cost evaluation for all K trajectories run in parallel on the GPU (CUDA). A separate QR-reading node watches the camera independently.
+Sensors flow through the course's EKF into `/odom`. The turbine AIS positions feed an A\* planner, which the mission state machine calls once per turbine to get an approach leg, then appends a dense analytic circle to it — publishing one continuous path rather than a string of waypoints. The SMPPI controller tracks that path: reference-trajectory construction, noise sampling and the control update run on the CPU (OpenMP), while the actual rollout simulation and cost evaluation for all K trajectories run in parallel on the GPU (CUDA). A separate QR-reading node watches the camera independently.
 
 ## Controller: Smooth MPPI
+
+### What is MPPI
+
+Model Predictive Path Integral (MPPI) control is a sampling-based flavor of model predictive control. Instead of solving for an optimal control sequence analytically, it simulates many randomly perturbed versions of a nominal control sequence forward through the actual nonlinear dynamics model, scores each resulting trajectory with a cost function, and blends the samples into an updated nominal sequence — weighted toward whichever rollouts scored best. Repeating this every control cycle, on a receding horizon, gives closed-loop feedback without ever needing to linearize the dynamics or the cost.
 
 ### Why "smooth"
 
@@ -117,7 +118,7 @@ Rollout costs are converted to importance weights via `w_k ∝ exp(-(cost_k − 
 | Rollout simulation (RK4 dynamics × K) | **GPU**, one CUDA thread per rollout |
 | Cost evaluation | **GPU**, fused into the same kernel |
 | Importance-weighted update | CPU |
-| RViz visualization (rollout "tentacles", optimal path) | CPU, throttled |
+| RViz visualization (rollout "tentacles", optimal path) | CPU |
 
 The control loop logs a `setup / noise / gpu / viz / rest` timing breakdown each cycle so you can see where the budget goes relative to the `dt = 0.1 s` (100 ms) control period.
 
@@ -149,41 +150,40 @@ The single-path design is deliberate: driving discrete stop-and-go waypoints aro
 
 Not yet wired: camera aiming, facing-direction computation, and handing off to the mission's 30-second station-keep + round-turn once all codes are read.
 
-## Installation
-
-<!-- TODO: fill in with your actual setup once you split off from the private fork -->
-
-```bash
-# same ROS 2 / Gazebo setup as the base repo — see
-# https://github.com/oKermorgant/aquabot for distro + install details
-git clone <this-repo-url>
-cd <this-repo>
-# extra dependencies for the SMPPI controller:
-#   CUDA toolkit (nvcc)
-#   Eigen3
-#   OpenMP
-# extra dependency for the QR node:
-#   python3-opencv, cv_bridge
-colcon build --symlink-install
-```
-
-## Usage
-
-```bash
-ros2 launch aquabot_gz turbines_launch.py world:=medium
-# TODO: your launch file(s) for EKF + planner + SMPPI controller + mission
-ros2 launch <your_package> aquabot_mppi.launch.py
-```
-
 ## Results
 
-<!-- TODO: tracking-error plots, before/after vs. the baseline PID, video links -->
+Measured over a full 4-turbine inspection run (451 s, logged at 10 Hz):
+
+| Metric | Overall | Steady-state* |
+|---|---|---|
+| Mean speed | 1.268 m/s | 1.274 m/s (σ = 0.114) |
+| Mean cross-track error | 0.745 m | 0.502 m |
+| Median cross-track error | 0.464 m | 0.399 m |
+| 95th percentile cross-track error | 1.78 m | 1.26 m |
+| Max cross-track error | 6.97 m | 1.43 m |
+
+\*excludes a ±3 s window around each of the 4 turbine-to-turbine transitions — the numbers that actually reflect the controller's tracking quality, isolated from planner latency (see below).
+
+![path tracking](docs/path_tracking.png)
+
+The boat holds the planned path tightly through both full orbits and both approach legs — cross-track error stays under ~0.5 m for the large majority of the run. There's one clear outlier.
+
+![speed profile](docs/speed_profile.png)
+![cross-track error over time](docs/cross_track_error.png)
+
+Four turbine-to-turbine transitions show up as brief deviation spikes (shaded above), three of them small (1.5–2.5 m peak, under ~14 s). The second one is a genuine outlier — 6.97 m peak, sustained for 16 s. It's not a control failure: `mission_turbines.py` calls the A\* planner **asynchronously** when an orbit completes and waits for the new approach path before advancing state; the MPPI controller keeps tracking the *old* plan (whose last waypoint the boat has already passed) until the new one arrives. That specific hop happened to be the longest inter-turbine leg in the run, so the planner call took longer and the boat drifted further before snapping onto the fresh path. See [Roadmap](#roadmap--known-limitations).
+
+<!-- TODO: hero/full-mission video links here once uploaded -->
+
 
 ## Roadmap / known limitations
 
+**QR Code Reading:**
 - [ ] Wire QR facing/aiming into the mission's station-keep phase
 - [ ] 30 s stabilization + round turn in front of the pinger-designated turbine
-- [ ] Quantify tracking performance vs. the baseline PID controller
+
+**Tracking:**
+- [ ] Overlap next-turbine planning with the tail of the current orbit (pre-fetch the approach path before the orbit finishes) instead of waiting for `PLAN_APPROACH` after completion — eliminates the stale-plan deviation seen during turbine-to-turbine handoffs (see [Results](#results))
 
 ## Acknowledgments
 

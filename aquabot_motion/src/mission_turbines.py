@@ -47,7 +47,7 @@ class MissionControl(Node):
         self.get_logger().info("Mission Control Online (continuous-circle)!")
 
         # ---------- tunables ----------
-        self.orbit_radius = 18.0          # inspection ring radius [m]
+        self.orbit_radius = 17.0          # inspection ring radius [m]
         self.orbit_points = 36            # density of the analytic circle
         self.orbit_arc_deg = 340.0        # path arc; < 360 so start/end don't overlap
         self.orbit_direction = +1         # +1 = counter-clockwise, -1 = clockwise

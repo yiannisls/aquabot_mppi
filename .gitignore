@@ -81,3 +81,7 @@ compile_commands.json
 *.a
 *.bag
 *.mcap
+
+# Videos hosted via GitHub's CDN (drag-and-drop), not committed to git
+docs/plots/**/*.mp4
+docs/plots/**/*.webm
