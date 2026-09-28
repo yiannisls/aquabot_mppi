@@ -1,14 +1,14 @@
-# Aquabot MPPI
-
-**Smooth Model Predictive Path Integral (SMPPI) control for the [Aquabot Challenge](https://github.com/oKermorgant/aquabot)**, an autonomous boat that has to plan an obstacle-avoidance route through a wind-turbine farm, orbit each turbine, and read its QR code.
-
-This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github.com/oKermorgant/aquabot) by O. Kermorgant, itself adapted from the [Sirehna Aquabot Challenge]. The lab scaffolding (simulator, EKF localization, base planner/control interfaces) comes from that repo. What's added here is a full GPU SMPPI controller, an obstacle avoidance global planner, and a continuous orbit inspection mission.
-
 <div align="center">
   <img src="docs/demo.gif" width="500" alt="demo">
   <br>
   <em>SMPPI (Smooth Model Predictive Path Integral) controller tracking the  path</em>
 </div>
+
+# Aquabot MPPI
+
+**Smooth Model Predictive Path Integral (SMPPI) control for the [Aquabot Challenge](https://github.com/oKermorgant/aquabot)**, an autonomous boat that has to plan an obstacle-avoidance route through a wind-turbine farm, orbit each turbine, and read its QR code.
+
+This project is a fork of the [Centrale Nantes ROS 2 Aquabot lab](https://github.com/oKermorgant/aquabot) by O. Kermorgant, itself adapted from the [Sirehna Aquabot Challenge]. The lab scaffolding (simulator, EKF localization, base planner/control interfaces) comes from that repo. What's added here is a full GPU SMPPI controller, an obstacle avoidance global planner, and a continuous orbit inspection mission.
 
 ## Table of contents
 
